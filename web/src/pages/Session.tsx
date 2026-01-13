@@ -21,8 +21,12 @@ export default function Session() {
 
   return (
     <div className="h-[calc(100vh-4rem)]">
-      <SessionView 
+      <SessionView
         sessionId={sessionId}
+        initialMessages={[]}
+        initialTokenUsage={null}
+        onMessageUpdate={() => {}}
+        onTokenUsageUpdate={() => {}}
         onBack={() => navigate('/')}
       />
     </div>

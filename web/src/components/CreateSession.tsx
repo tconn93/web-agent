@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import * as sessionService from '../services/sessionService'
 
 type Props = {
-  onSessionCreated: (sessionId: string, agentType: string) => void
+  onSessionCreated: (sessionId: string, agentType: string, workspace: string) => void
   onCancel?: () => void
 }
 
@@ -29,7 +30,14 @@ export function CreateSession({ onSessionCreated, onCancel }: Props) {
       if (!res.ok) throw new Error("Failed to create session")
 
       const data = await res.json()
-      onSessionCreated(data.session_id, data.agent_type || agentType)
+
+      // Initialize session in database
+      await sessionService.initializeSession(data.session_id, {
+        workspace: data.workspace,
+        agent_type: data.agent_type || agentType
+      })
+
+      onSessionCreated(data.session_id, data.agent_type || agentType, data.workspace)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {

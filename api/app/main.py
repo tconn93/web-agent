@@ -30,6 +30,14 @@ app = FastAPI(
     version="0.1.0"
 )
 
+# Include session routes for database persistence
+try:
+    from app.routes.session_routes import router as session_router
+    app.include_router(session_router)
+    print("✓ Session routes loaded successfully")
+except ImportError as e:
+    print(f"Warning: Session routes not available: {e}")
+
 # Authentication routes disabled
 # Uncomment below to re-enable authentication
 # try:
@@ -168,6 +176,28 @@ async def create_session(req: StartSessionRequest):
     }
 
 
+@app.post("/sessions/{session_id}/resume")
+async def resume_session(session_id: str, workspace: str, agent_type: str):
+    """Resume an existing session (for WebSocket to work)"""
+    from pathlib import Path
+    Path(workspace).mkdir(parents=True, exist_ok=True)
+
+    sessions[session_id] = {
+        "history": [],
+        "workspace": workspace,
+        "agent_type": agent_type,
+        "changes": [],
+        "created_at": datetime.utcnow().isoformat()
+    }
+
+    return {
+        "session_id": session_id,
+        "workspace": workspace,
+        "agent_type": agent_type,
+        "message": "Session resumed successfully"
+    }
+
+
 @app.websocket("/ws/{session_id}")
 async def agent_websocket(websocket: WebSocket, session_id: str):
     await websocket.accept()
@@ -246,22 +276,23 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
             except Exception as e:
                 error_msg = f"Agent loop error: {str(e)}"
                 print(error_msg)  # server log
-                await websocket.send_json(ErrorMessage(
-                    content=error_msg,
-                    fatal=False
-                ).model_dump())
+                import traceback
+                traceback.print_exc()
+                try:
+                    await websocket.send_json(ErrorMessage(
+                        content=error_msg,
+                        fatal=False
+                    ).model_dump())
+                except:
+                    print(f"Could not send error message (connection may be closed)")
 
     except WebSocketDisconnect:
         print(f"Client disconnected from session {session_id}")
     except Exception as e:
         print(f"WebSocket error in session {session_id}: {str(e)}")
-        try:
-            await websocket.send_json(ErrorMessage(
-                content="Connection error occurred",
-                fatal=True
-            ).model_dump())
-        except:
-            pass
+        import traceback
+        traceback.print_exc()
+        # Don't try to send error message - connection is likely closed
     finally:
         try:
             await websocket.close()

@@ -76,7 +76,7 @@ export function FileExplorer({ sessionId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-950/40 min-h-0">
+    <div className="flex flex-col h-full bg-gray-950/40 overflow-hidden">
       {/* Header */}
       <div className="border-b border-gray-800 p-3 flex items-center justify-between flex-shrink-0">
         <h3 className="font-medium text-sm">File Explorer</h3>
@@ -98,7 +98,7 @@ export function FileExplorer({ sessionId }: Props) {
       )}
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1">
         {/* Parent directory link */}
         {currentPath && (
           <button

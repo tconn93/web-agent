@@ -65,7 +65,7 @@ export function ChangesTracker({ sessionId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-950/40 min-h-0">
+    <div className="flex flex-col h-full bg-gray-950/40 overflow-hidden">
       {/* Header */}
       <div className="border-b border-gray-800 p-3 flex items-center justify-between flex-shrink-0">
         <h3 className="font-medium text-sm">Changes</h3>
@@ -87,7 +87,7 @@ export function ChangesTracker({ sessionId }: Props) {
       )}
 
       {/* Changes List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2">
         {changes.length === 0 ? (
           <div className="text-center text-gray-500 text-sm py-8">
             <FileEdit size={32} className="mx-auto mb-2 opacity-50" />

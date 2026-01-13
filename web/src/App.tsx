@@ -2,13 +2,34 @@ import { useState, useEffect } from 'react'
 import { SessionView } from './components/SessionView'
 import { CreateSession } from './components/CreateSession'
 import { LoginPage } from './components/LoginPage'
+import { RecentSessions } from './components/RecentSessions'
 import { Plus, X, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import * as sessionService from './services/sessionService'
+
+type Message = {
+  type: string
+  content: string
+  timestamp?: string
+  tool_name?: string
+  arguments?: any
+  success?: boolean
+}
+
+type TokenUsage = {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated_cost: number
+}
 
 type Session = {
   id: string
   name: string
   agentType?: string
+  workspace?: string
+  messages: Message[]
+  tokenUsage: TokenUsage | null
 }
 
 function App() {
@@ -40,16 +61,79 @@ function App() {
     setActiveSessionId(null)
   }
 
-  const handleSessionCreated = (sessionId: string, agentType: string) => {
+  const handleSessionCreated = (sessionId: string, agentType: string, workspace: string) => {
     const typeLabel = agentType === 'planning' ? '📋' : '🔨'
-    const newSession = {
+    const newSession: Session = {
       id: sessionId,
       name: `${typeLabel} ${sessionId.slice(0, 8)}`,
-      agentType
+      agentType,
+      workspace,
+      messages: [],
+      tokenUsage: null
     }
     setSessions(prev => [...prev, newSession])
     setActiveSessionId(sessionId)
     setShowCreateSession(false)
+  }
+
+  const handleMessageUpdate = (sessionId: string, message: Message) => {
+    setSessions(prev => prev.map(session =>
+      session.id === sessionId
+        ? { ...session, messages: [...session.messages, message] }
+        : session
+    ))
+  }
+
+  const handleTokenUsageUpdate = (sessionId: string, tokenUsage: TokenUsage) => {
+    setSessions(prev => prev.map(session =>
+      session.id === sessionId
+        ? { ...session, tokenUsage }
+        : session
+    ))
+  }
+
+  const handleLoadRecentSession = async (sessionId: string) => {
+    // Check if session is already open
+    const existingSession = sessions.find(s => s.id === sessionId)
+    if (existingSession) {
+      setActiveSessionId(sessionId)
+      return
+    }
+
+    // Load session from database
+    const sessionData = await sessionService.loadFullSession(sessionId)
+    if (!sessionData) {
+      console.error('Failed to load session')
+      return
+    }
+
+    // Resume the session in backend (for WebSocket to work)
+    try {
+      await fetch(`http://localhost:8000/sessions/${sessionId}/resume?workspace=${encodeURIComponent(sessionData.workspace)}&agent_type=${sessionData.agentType}`, {
+        method: "POST"
+      })
+    } catch (err) {
+      console.error('Failed to resume session in backend:', err)
+    }
+
+    const typeLabel = sessionData.agentType === 'planning' ? '📋' : '🔨'
+    const newSession: Session = {
+      id: sessionId,
+      name: `${typeLabel} ${sessionId.slice(0, 8)}`,
+      agentType: sessionData.agentType,
+      workspace: sessionData.workspace,
+      messages: sessionData.messages.map(msg => ({
+        type: msg.message_type,
+        content: msg.content,
+        tool_name: undefined,
+        arguments: undefined,
+        success: undefined
+      })),
+      tokenUsage: sessionData.tokenUsage
+    }
+
+    setSessions(prev => [...prev, newSession])
+    setActiveSessionId(sessionId)
   }
 
   const handleCloseSession = (sessionId: string, e: React.MouseEvent) => {
@@ -68,13 +152,17 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="border-b p-4 bg-card flex items-center justify-between">
+    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      <header className="border-b p-4 bg-card flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold">Web Agent Hub</h1>
           <p className="text-muted-foreground text-sm">Grok-powered autonomous coding agent</p>
         </div>
         <div className="flex items-center gap-4">
+          <RecentSessions
+            onSessionSelect={handleLoadRecentSession}
+            currentSessionId={activeSessionId || undefined}
+          />
           <span className="text-sm text-gray-400">
             Welcome, <span className="text-white font-medium">{username}</span>
           </span>
@@ -91,7 +179,7 @@ function App() {
 
       {/* Session Tabs */}
       {sessions.length > 0 && (
-        <div className="border-b border-gray-800 bg-gray-950/70 flex items-center gap-2 px-2 overflow-x-auto">
+        <div className="border-b border-gray-800 bg-gray-950/70 flex items-center gap-2 px-2 overflow-x-auto flex-shrink-0">
           {sessions.map(session => (
             <div
               key={session.id}
@@ -134,6 +222,10 @@ function App() {
           <SessionView
             key={activeSession.id}
             sessionId={activeSession.id}
+            initialMessages={activeSession.messages}
+            initialTokenUsage={activeSession.tokenUsage}
+            onMessageUpdate={(message) => handleMessageUpdate(activeSession.id, message)}
+            onTokenUsageUpdate={(tokenUsage) => handleTokenUsageUpdate(activeSession.id, tokenUsage)}
             onBack={() => {}}
           />
         ) : (

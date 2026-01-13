@@ -13,7 +13,7 @@ export function RightSidebar({ sessionId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('files')
 
   return (
-    <div className="w-80 border-l border-gray-800 flex flex-col min-h-0">
+    <div className="w-80 border-l border-gray-800 flex flex-col h-full overflow-hidden">
       {/* Tabs */}
       <div className="border-b border-gray-800 flex flex-shrink-0">
         <button
@@ -41,7 +41,7 @@ export function RightSidebar({ sessionId }: Props) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden min-h-0">
+      <div className="flex-1 overflow-hidden">
         {activeTab === 'files' && <FileExplorer sessionId={sessionId} />}
         {activeTab === 'changes' && <ChangesTracker sessionId={sessionId} />}
       </div>
