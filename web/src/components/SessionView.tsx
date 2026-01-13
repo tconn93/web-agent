@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageInput } from './MessageInput'
 import { ChatMessage } from './ChatMessage'
+import { RightSidebar } from './RightSidebar'
 import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
 import { ArrowLeft } from 'lucide-react'
 
@@ -15,6 +16,13 @@ type Message = {
   done?: boolean
 }
 
+type TokenUsage = {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated_cost: number
+}
+
 type Props = {
   sessionId: string
   onBack: () => void
@@ -22,10 +30,15 @@ type Props = {
 
 export function SessionView({ sessionId, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const handleMessage = useCallback((event: any) => {
-    setMessages((prev) => [...prev, event])
+    if (event.type === 'token_usage') {
+      setTokenUsage(event)
+    } else {
+      setMessages((prev) => [...prev, event])
+    }
   }, [])
 
   const { sendMessage, isConnected, error } = useAgentWebSocket({
@@ -41,9 +54,11 @@ export function SessionView({ sessionId, onBack }: Props) {
   }, [messages])
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-950/70 p-4 flex items-center justify-between">
+    <div className="flex h-full max-h-full overflow-hidden">
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header */}
+        <div className="border-b border-gray-800 bg-gray-950/70 p-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -59,11 +74,32 @@ export function SessionView({ sessionId, onBack }: Props) {
             </p>
           </div>
         </div>
+
+        {/* Token Usage */}
+        {tokenUsage && (
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Tokens:</span>
+              <span className="font-mono text-blue-400">
+                {tokenUsage.total_tokens.toLocaleString()}
+              </span>
+              <span className="text-gray-600 text-xs">
+                ({tokenUsage.input_tokens.toLocaleString()} in / {tokenUsage.output_tokens.toLocaleString()} out)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Cost:</span>
+              <span className="font-mono text-green-400">
+                ${tokenUsage.estimated_cost.toFixed(4)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Connection error banner */}
       {error && (
-        <div className="bg-red-900/60 text-red-300 p-3 text-center text-sm">
+        <div className="bg-red-900/60 text-red-300 p-3 text-center text-sm flex-shrink-0">
           {error}
         </div>
       )}
@@ -71,7 +107,7 @@ export function SessionView({ sessionId, onBack }: Props) {
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-1 bg-gray-950/40"
+        className="flex-1 overflow-y-auto p-5 space-y-1 bg-gray-950/40 min-h-0"
       >
         {messages.length === 0 && (
           <div className="text-center text-gray-600 py-12 italic">
@@ -84,10 +120,14 @@ export function SessionView({ sessionId, onBack }: Props) {
         ))}
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-gray-800 bg-gray-950/70 p-4">
-        <MessageInput onSend={sendMessage} disabled={!isConnected} />
+        {/* Input area */}
+        <div className="border-t border-gray-800 bg-gray-950/70 p-4 flex-shrink-0">
+          <MessageInput onSend={sendMessage} disabled={!isConnected} />
+        </div>
       </div>
+
+      {/* Right Sidebar */}
+      <RightSidebar sessionId={sessionId} />
     </div>
   )
 }

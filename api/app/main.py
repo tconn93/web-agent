@@ -18,7 +18,9 @@ from app.models import (
     AssistantMessage,
     ToolCallMessage,
     ToolResultMessage,
-    ErrorMessage
+    ErrorMessage,
+    TokenUsageMessage,
+    FileChangeMessage
 )
 from app.tools import get_all_tools  # Make sure this exists!
 
@@ -27,6 +29,14 @@ app = FastAPI(
     description="Web UI for autonomous coding agent powered by Grok",
     version="0.1.0"
 )
+
+# Authentication routes disabled
+# Uncomment below to re-enable authentication
+# try:
+#     from app.routes.auth_routes import router as auth_router
+#     app.include_router(auth_router)
+# except ImportError as e:
+#     print(f"Warning: Auth routes not available: {e}")
 
 # Allow frontend (Vite default port)
 app.add_middleware(
@@ -42,6 +52,7 @@ app.add_middleware(
 class StartSessionRequest(BaseModel):
     initial_prompt: str | None = None
     workspace: str | None = None
+    agent_type: str = "building"  # "planning" or "building"
 
 
 class MessageRequest(BaseModel):
@@ -64,24 +75,95 @@ async def health_check():
     }
 
 
+@app.get("/sessions/{session_id}/files")
+async def list_session_files(session_id: str, path: str = ""):
+    """List files in the session workspace"""
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    from pathlib import Path
+
+    workspace = Path(sessions[session_id]["workspace"]).resolve()
+    target = (workspace / path).resolve() if path else workspace
+
+    # Security: ensure path is within workspace
+    if not str(target).startswith(str(workspace)):
+        raise HTTPException(status_code=403, detail="Path outside workspace")
+
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+
+    try:
+        items = []
+        for item in sorted(target.iterdir()):
+            try:
+                relative = item.relative_to(workspace)
+                is_dir = item.is_dir()
+
+                items.append({
+                    "name": item.name,
+                    "path": str(relative),
+                    "type": "directory" if is_dir else "file",
+                    "size": item.stat().st_size if not is_dir else None
+                })
+            except Exception:
+                continue
+
+        return {"files": items, "path": path}
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sessions/{session_id}/changes")
+async def get_session_changes(session_id: str):
+    """Get file changes for a session"""
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"changes": sessions[session_id].get("changes", [])}
+
+
+@app.post("/sessions/{session_id}/changes")
+async def add_session_change(session_id: str, change: dict):
+    """Add a file change to the session (called by tools)"""
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    change["timestamp"] = datetime.utcnow().isoformat()
+    sessions[session_id]["changes"].append(change)
+
+    return {"success": True}
+
+
 @app.post("/sessions")
 async def create_session(req: StartSessionRequest):
     session_id = str(uuid.uuid4())
-    
+
     workspace = req.workspace or settings.default_workspace
     # Make sure workspace exists
     from pathlib import Path
     Path(workspace).mkdir(parents=True, exist_ok=True)
 
+    # Validate agent_type
+    agent_type = req.agent_type if req.agent_type in ["planning", "building"] else "building"
+
     sessions[session_id] = {
         "history": [],
         "workspace": workspace,
+        "agent_type": agent_type,
+        "changes": [],  # Track file changes
         "created_at": datetime.utcnow().isoformat()
     }
 
     return {
         "session_id": session_id,
         "workspace": workspace,
+        "agent_type": agent_type,
         "message": "Session created successfully"
     }
 
@@ -102,6 +184,7 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
     session = sessions[session_id]
     history = session["history"]
     workspace = session["workspace"]
+    agent_type = session.get("agent_type", "building")
 
     try:
         while True:
@@ -123,7 +206,8 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                 async for event_dict in run_agent(
                     user_message=user_message,
                     workspace=workspace,
-                    history=history.copy()  # shallow copy - we append in place later
+                    history=history.copy(),  # shallow copy - we append in place later
+                    agent_type=agent_type
                 ):
                     # Convert dict → proper model (for validation & serialization)
                     if event_dict["type"] == "status":
@@ -138,6 +222,10 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                         event = ToolResultMessage(**event_dict)
                     elif event_dict["type"] == "error":
                         event = ErrorMessage(**event_dict)
+                    elif event_dict["type"] == "token_usage":
+                        event = TokenUsageMessage(**event_dict)
+                    elif event_dict["type"] == "file_change":
+                        event = FileChangeMessage(**event_dict)
                     else:
                         event = StatusMessage(type="status", content=str(event_dict))
 
@@ -150,6 +238,10 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                             "role": event.type,
                             "content": event.content
                         })
+
+                    # Track file changes
+                    if event.type == "file_change":
+                        session["changes"].append(event.model_dump())
 
             except Exception as e:
                 error_msg = f"Agent loop error: {str(e)}"

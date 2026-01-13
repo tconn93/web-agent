@@ -45,6 +45,21 @@ class ErrorMessage(AgentMessage):
     fatal: bool = False
 
 
+class TokenUsageMessage(AgentMessage):
+    type: Literal["token_usage"] = "token_usage"
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    estimated_cost: float
+
+
+class FileChangeMessage(AgentMessage):
+    type: Literal["file_change"] = "file_change"
+    action: str  # "write", "delete", etc.
+    file_path: str
+    tool_name: str
+
+
 # Union of all possible websocket messages
 WebsocketEvent = (
     StatusMessage
@@ -53,4 +68,6 @@ WebsocketEvent = (
     | ToolCallMessage
     | ToolResultMessage
     | ErrorMessage
+    | TokenUsageMessage
+    | FileChangeMessage
 )

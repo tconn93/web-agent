@@ -1,5 +1,8 @@
 import { Terminal, FileEdit, FileText, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
 
 type MessageProps = {
   message: any
@@ -50,7 +53,27 @@ export function ChatMessage({ message }: MessageProps) {
 
         {/* Assistant normal response */}
         {isAssistant && (
-          <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
+          <div className="prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                code: ({ node, inline, className, children, ...props }: any) => {
+                  return inline ? (
+                    <code className="bg-gray-900/60 px-1.5 py-0.5 rounded text-sm" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  )
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
         )}
 
         {/* Tool Call */}

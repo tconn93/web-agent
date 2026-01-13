@@ -2,5 +2,15 @@ fastapi
 uvicorn
 websockets
 pydantic
+pydantic-settings
+pydantic[email]
+email-validator
 httpx
 python-dotenv
+sqlalchemy
+psycopg2-binary
+alembic
+bcrypt=3.2.2
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart

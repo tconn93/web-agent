@@ -5,15 +5,45 @@ from app.grok_client import chat_completion
 from app.tools import get_all_tools  # returns list of Tool instances
 from app.config import settings
 
+AGENT_PROMPTS = {
+    "planning": """You are a Planning Agent. Your role is to:
+- Analyze requirements and ask clarifying questions
+- Break down complex tasks into manageable steps
+- Design system architecture and data flows
+- Create detailed implementation plans
+- Identify potential challenges and trade-offs
+- Focus on the "what" and "why" before the "how"
+
+You should NOT write implementation code. Instead, focus on understanding, planning, and designing.""",
+
+    "building": """You are a Building Agent. Your role is to:
+- Implement code based on specifications and plans
+- Write clean, efficient, and well-tested code
+- Fix bugs and refactor existing code
+- Execute development tasks with precision
+- Use the available tools to read, write, and test code
+- Focus on getting things done
+
+You should write working code and execute implementation tasks."""
+}
+
 async def run_agent(
     user_message: str,
     workspace: str,
-    history: list = None
+    history: list = None,
+    agent_type: str = "building"
 ) -> AsyncGenerator[dict, None]:
     if history is None:
         history = []
 
-    messages = history + [{"role": "user", "content": user_message}]
+    # Add system prompt based on agent type
+    system_prompt = AGENT_PROMPTS.get(agent_type, AGENT_PROMPTS["building"])
+
+    # Insert system message at the beginning if not already present
+    if not history or history[0].get("role") != "system":
+        messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_message}]
+    else:
+        messages = history + [{"role": "user", "content": user_message}]
 
     tools = get_all_tools()
     tool_schemas = [t.schema for t in tools]
@@ -21,10 +51,35 @@ async def run_agent(
 
     workspace_path = Path(workspace).resolve()
 
+    # Track token usage
+    total_input_tokens = 0
+    total_output_tokens = 0
+
     for iteration in range(settings.max_iterations):
         yield {"type": "status", "content": f"Thinking... (iteration {iteration + 1})"}
 
         response = await chat_completion(messages, tools=tool_schemas)
+
+        # Track token usage
+        if "usage" in response:
+            usage = response["usage"]
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            total_input_tokens += input_tokens
+            total_output_tokens += output_tokens
+
+            # Calculate cost (prices are per million tokens)
+            input_cost = (input_tokens / 1_000_000) * settings.input_price
+            output_cost = (output_tokens / 1_000_000) * settings.output_price
+            total_cost = input_cost + output_cost
+
+            yield {
+                "type": "token_usage",
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+                "total_tokens": total_input_tokens + total_output_tokens,
+                "estimated_cost": round(total_cost, 6)
+            }
 
         msg = response["choices"][0]["message"]
         messages.append(msg)
@@ -49,6 +104,15 @@ async def run_agent(
                     "content": result,
                     "success": True
                 }
+
+                # Track file changes
+                if func_name == "write_file":
+                    yield {
+                        "type": "file_change",
+                        "action": "write",
+                        "file_path": args.get("file_path", ""),
+                        "tool_name": func_name
+                    }
 
                 messages.append({
                     "role": "tool",
