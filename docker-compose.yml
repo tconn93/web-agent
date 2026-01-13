@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  orchestrator-api:
+    build: ./orchestrator-api
+    ports:
+      - '3000:3000'
+  web-ui:
+    build: ./web-ui
+    ports:
+      - '5173:5173'
+    depends_on:
+      - orchestrator-api
