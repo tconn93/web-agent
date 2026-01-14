@@ -99,10 +99,36 @@ export function SessionView({
     }
   }, [sessionId, onMessageUpdate, onTokenUsageUpdate])
 
-  const { sendMessage, isConnected, error } = useAgentWebSocket({
+  const { sendMessage: wsSendMessage, isConnected, error } = useAgentWebSocket({
     sessionId,
     onMessage: handleMessage
   })
+
+  // Wrap sendMessage to capture user input
+  const sendMessage = useCallback((message: string) => {
+    // Create user message object
+    const userMessage: Message = {
+      type: 'user',
+      content: message,
+      tool_name: undefined,
+      arguments: undefined,
+      success: undefined
+    }
+
+    // Add to local state
+    setMessages((prev) => [...prev, userMessage])
+    onMessageUpdate(userMessage)
+
+    // Save to database (non-blocking)
+    sessionService.saveMessage(sessionId, {
+      role: 'user',
+      content: message,
+      message_type: 'user'
+    }).catch(err => console.warn('Failed to save user message:', err))
+
+    // Send via WebSocket
+    wsSendMessage(message)
+  }, [sessionId, wsSendMessage, onMessageUpdate])
 
   // Auto scroll to bottom
   useEffect(() => {
