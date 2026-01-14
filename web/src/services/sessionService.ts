@@ -2,7 +2,7 @@
  * Service for persisting session data to the backend database
  */
 
-const API_BASE = 'http://localhost:8000/api/sessions'
+const API_BASE = 'http://10.0.158.82:8000/api/sessions'
 
 export interface MessageData {
   role: string

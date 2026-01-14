@@ -29,7 +29,7 @@ export function useAgentWebSocket({ sessionId, onMessage }: UseAgentWebSocketOpt
     // const protocol = 'ws:'
     // // Use environment variable or default to localhost:8000
     // const host = import.meta.env.VITE_API_HOST || 'localhost:8000'
-    const wsUrl = `ws://localhost:8000/ws/${sessionId}`
+    const wsUrl = `ws://10.0.158.82:8000/ws/${sessionId}`
 
     console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
