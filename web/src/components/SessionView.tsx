@@ -3,7 +3,7 @@ import { MessageInput } from './MessageInput'
 import { ChatMessage } from './ChatMessage'
 import { RightSidebar } from './RightSidebar'
 import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FolderOpen, MessageSquare } from 'lucide-react'
 import * as sessionService from '../services/sessionService'
 
 type Message = {
@@ -43,6 +43,7 @@ export function SessionView({
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(initialTokenUsage)
+  const [mobileView, setMobileView] = useState<'chat' | 'files'>('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Update local state when initial values change (session switch)
@@ -139,8 +140,8 @@ export function SessionView({
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      {/* Main Chat Area - hidden on mobile when viewing files */}
+      <div className={`flex-1 flex flex-col h-full overflow-hidden ${mobileView === 'files' ? 'hidden md:flex' : 'flex'}`}>
         {/* Header */}
         <div className="border-b border-gray-800 bg-gray-950/70 p-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -159,26 +160,47 @@ export function SessionView({
           </div>
         </div>
 
-        {/* Token Usage */}
-        {tokenUsage && (
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">Tokens:</span>
-              <span className="font-mono text-blue-400">
-                {tokenUsage.total_tokens.toLocaleString()}
-              </span>
-              <span className="text-gray-600 text-xs">
-                ({tokenUsage.input_tokens.toLocaleString()} in / {tokenUsage.output_tokens.toLocaleString()} out)
-              </span>
+        <div className="flex items-center gap-2">
+          {/* Token Usage - hidden on mobile */}
+          {tokenUsage && (
+            <div className="hidden sm:flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">Tokens:</span>
+                <span className="font-mono text-blue-400">
+                  {tokenUsage.total_tokens.toLocaleString()}
+                </span>
+                <span className="text-gray-600 text-xs">
+                  ({tokenUsage.input_tokens.toLocaleString()} in / {tokenUsage.output_tokens.toLocaleString()} out)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">Cost:</span>
+                <span className="font-mono text-green-400">
+                  ${tokenUsage.estimated_cost.toFixed(4)}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">Cost:</span>
-              <span className="font-mono text-green-400">
-                ${tokenUsage.estimated_cost.toFixed(4)}
-              </span>
-            </div>
-          </div>
-        )}
+          )}
+
+          {/* Mobile toggle button */}
+          <button
+            onClick={() => setMobileView(mobileView === 'chat' ? 'files' : 'chat')}
+            className="md:hidden p-2 hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2 text-sm"
+            title={mobileView === 'chat' ? 'Show Files' : 'Show Chat'}
+          >
+            {mobileView === 'chat' ? (
+              <>
+                <FolderOpen size={20} />
+                <span>Files</span>
+              </>
+            ) : (
+              <>
+                <MessageSquare size={20} />
+                <span>Chat</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Connection error banner */}
@@ -242,8 +264,14 @@ export function SessionView({
         </div>
       </div>
 
-      {/* Right Sidebar */}
-      <RightSidebar sessionId={sessionId} />
+      {/* Right Sidebar - visible on mobile only when files view is active */}
+      <div className={`${mobileView === 'chat' ? 'hidden md:block' : 'block w-full md:w-auto'}`}>
+        <RightSidebar
+          sessionId={sessionId}
+          onBackToChat={() => setMobileView('chat')}
+          isMobileFullScreen={mobileView === 'files'}
+        />
+      </div>
     </div>
   )
 }

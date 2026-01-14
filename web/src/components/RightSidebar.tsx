@@ -2,18 +2,38 @@ import { useState } from 'react'
 import { FileExplorer } from './FileExplorer'
 import { ChangesTracker } from './ChangesTracker'
 import { cn } from '@/lib/utils'
+import { ArrowLeft } from 'lucide-react'
 
 type Props = {
   sessionId: string
+  onBackToChat?: () => void
+  isMobileFullScreen?: boolean
 }
 
 type Tab = 'files' | 'changes'
 
-export function RightSidebar({ sessionId }: Props) {
+export function RightSidebar({ sessionId, onBackToChat, isMobileFullScreen }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('files')
 
   return (
-    <div className="w-80 border-l border-gray-800 flex flex-col h-full overflow-hidden">
+    <div className={cn(
+      "border-l border-gray-800 flex flex-col h-full overflow-hidden",
+      isMobileFullScreen ? "w-full md:w-80" : "w-80"
+    )}>
+      {/* Mobile header with back button */}
+      {isMobileFullScreen && (
+        <div className="md:hidden border-b border-gray-800 bg-gray-950/70 p-4 flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={onBackToChat}
+            className="p-2 hover:bg-gray-800 rounded-full transition-colors"
+            title="Back to Chat"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="font-medium">Files & Changes</h2>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="border-b border-gray-800 flex flex-shrink-0">
         <button
