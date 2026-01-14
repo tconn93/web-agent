@@ -4,9 +4,9 @@ from .base_tool import Tool
 from .read_file import ReadFileTool
 from .write_file import WriteFileTool
 from .execute_bash import ExecuteBashTool
-
-# Optional: you can also import other tools here when you add them later
-# from .some_other_tool import SomeOtherTool
+from .list_files import ListFilesTool
+from .web_search import WebSearchTool
+from .explore_structure import ExploreStructureTool
 
 def get_all_tools() -> list[Tool]:
     """
@@ -17,5 +17,7 @@ def get_all_tools() -> list[Tool]:
         ReadFileTool(),
         WriteFileTool(),
         ExecuteBashTool(),
-        # SomeOtherTool(),   # ← add new ones here
+        ListFilesTool(),
+        WebSearchTool(),
+        ExploreStructureTool(),
     ]

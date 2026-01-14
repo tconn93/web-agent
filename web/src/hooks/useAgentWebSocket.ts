@@ -11,6 +11,12 @@ export function useAgentWebSocket({ sessionId, onMessage }: UseAgentWebSocketOpt
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const onMessageRef = useRef(onMessage)
+
+  // Keep the callback ref up to date
+  useEffect(() => {
+    onMessageRef.current = onMessage
+  }, [onMessage])
 
   const sendMessage = useCallback((message: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -38,7 +44,7 @@ export function useAgentWebSocket({ sessionId, onMessage }: UseAgentWebSocketOpt
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        onMessage(data)
+        onMessageRef.current(data)
       } catch (err) {
         console.error('Failed to parse websocket message:', err)
       }
@@ -59,7 +65,7 @@ export function useAgentWebSocket({ sessionId, onMessage }: UseAgentWebSocketOpt
       ws.close()
       wsRef.current = null
     }
-  }, [sessionId, onMessage])
+  }, [sessionId])
 
   return {
     sendMessage,

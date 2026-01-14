@@ -1,11 +1,16 @@
-import { Terminal, FileEdit, FileText, AlertCircle } from 'lucide-react'
+import { Terminal, FileEdit, FileText, AlertCircle, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
 
 type MessageProps = {
   message: any
+  hasResult?: boolean
+  resultSuccess?: boolean
 }
 
-export function ChatMessage({ message }: MessageProps) {
+export function ChatMessage({ message, hasResult, resultSuccess }: MessageProps) {
   const isUser = message.type === 'user'
   const isAssistant = message.type === 'assistant'
   const isToolCall = message.type === 'tool_call'
@@ -50,7 +55,27 @@ export function ChatMessage({ message }: MessageProps) {
 
         {/* Assistant normal response */}
         {isAssistant && (
-          <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
+          <div className="prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                code: ({ node, inline, className, children, ...props }: any) => {
+                  return inline ? (
+                    <code className="bg-gray-900/60 px-1.5 py-0.5 rounded text-sm" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  )
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
         )}
 
         {/* Tool Call */}
@@ -59,10 +84,27 @@ export function ChatMessage({ message }: MessageProps) {
             <div className="flex items-center gap-2 text-amber-300/90 text-sm font-medium">
               {getToolIcon()}
               <span>→ {message.tool_name}</span>
+              {hasResult && resultSuccess && (
+                <CheckCircle size={16} className="text-green-400 ml-auto" />
+              )}
+              {hasResult && !resultSuccess && (
+                <span className="text-red-400 ml-auto">✗</span>
+              )}
             </div>
-            <pre className="text-xs bg-black/40 p-2.5 rounded overflow-x-auto font-mono">
-              {JSON.stringify(message.arguments, null, 2)}
-            </pre>
+            {message.arguments && Object.keys(message.arguments).length > 0 && (
+              <div className="text-xs text-amber-200/70 space-y-0.5">
+                {Object.entries(message.arguments).map(([key, value]) => (
+                  <div key={key} className="truncate">
+                    <span className="opacity-60">{key}:</span>{' '}
+                    <span className="font-mono">
+                      {typeof value === 'string' && value.length > 60
+                        ? value.substring(0, 60) + '...'
+                        : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
