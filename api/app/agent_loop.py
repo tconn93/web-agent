@@ -82,7 +82,23 @@ async def run_agent(
             }
 
         msg = response["choices"][0]["message"]
-        messages.append(msg)
+
+        # Sanitize the assistant message before adding to history
+        # The API response format may differ from what's expected in requests
+        sanitized_msg = {
+            "role": "assistant",
+        }
+
+        # Handle content - if null/None when tool_calls exist, set to empty string
+        if msg.get("tool_calls"):
+            sanitized_msg["tool_calls"] = msg["tool_calls"]
+            # Some APIs require content to be a string, not null
+            sanitized_msg["content"] = msg.get("content") or ""
+        else:
+            # Regular text response
+            sanitized_msg["content"] = msg.get("content", "")
+
+        messages.append(sanitized_msg)
 
         if msg.get("tool_calls"):
             for tool_call in msg["tool_calls"]:
@@ -97,6 +113,12 @@ async def run_agent(
 
                 tool = tool_map[func_name]
                 result = await tool.execute(args, workspace=workspace_path)
+
+                # Ensure result is always a string (never None)
+                if result is None:
+                    result = "(no output)"
+                elif not isinstance(result, str):
+                    result = str(result)
 
                 yield {
                     "type": "tool_result",
@@ -114,11 +136,12 @@ async def run_agent(
                         "tool_name": func_name
                     }
 
+                # Add tool result to conversation history
+                # Note: Grok API uses "tool" role (OpenAI format)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],
-                    "name": func_name,
-                    "content": result
+                    "content": result  # Must be a non-empty string
                 })
         else:
             # Final assistant response
