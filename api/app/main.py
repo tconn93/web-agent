@@ -263,11 +263,11 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                     await websocket.send_json(event.model_dump())
 
                     # Keep history updated (especially assistant messages & tool results)
-                    if event.type in ("assistant", "tool_result"):
-                        history.append({
-                            "role": event.type,
-                            "content": event.content
-                        })
+                    # if event.type in ("assistant", "tool_result"):
+                    #     history.append({
+                    #         "role": event.type,
+                    #         "content": event.content
+                    #     })
 
                     # Track file changes
                     if event.type == "file_change":
