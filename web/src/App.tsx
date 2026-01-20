@@ -6,6 +6,7 @@ import { RecentSessions } from './components/RecentSessions'
 import { Plus, X, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import * as sessionService from './services/sessionService'
+import { config } from './config'
 
 type Message = {
   type: string
@@ -107,9 +108,12 @@ function App() {
       return
     }
 
-    // Resume the session in backend (for WebSocket to work)
+    // Resume the session in backend (for WebSocket to work) - include token usage for accumulation
     try {
-      await fetch(`http://localhost:8000/sessions/${sessionId}/resume?workspace=${encodeURIComponent(sessionData.workspace)}&agent_type=${sessionData.agentType}`, {
+      const tokenParams = sessionData.tokenUsage
+        ? `&input_tokens=${sessionData.tokenUsage.input_tokens}&output_tokens=${sessionData.tokenUsage.output_tokens}&estimated_cost=${sessionData.tokenUsage.estimated_cost}`
+        : ''
+      await fetch(`${config.apiBaseUrl}/sessions/${sessionId}/resume?workspace=${encodeURIComponent(sessionData.workspace)}&agent_type=${sessionData.agentType}${tokenParams}`, {
         method: "POST"
       })
     } catch (err) {

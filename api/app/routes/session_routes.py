@@ -43,6 +43,8 @@ class FileChangeCreate(BaseModel):
     file_path: str
     action: str
     tool_name: str
+    content_before: Optional[str] = None
+    content_after: Optional[str] = None
 
 
 class TokenUsageCreate(BaseModel):
@@ -132,7 +134,9 @@ async def save_file_change(session_id: str, file_change: FileChangeCreate, db: S
         session_id=session_id,
         file_path=file_change.file_path,
         action=file_change.action,
-        tool_name=file_change.tool_name
+        tool_name=file_change.tool_name,
+        content_before=file_change.content_before,
+        content_after=file_change.content_after
     )
     db.add(db_file_change)
     db.commit()

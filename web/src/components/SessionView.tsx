@@ -94,7 +94,9 @@ export function SessionView({
         sessionService.saveFileChange(sessionId, {
           file_path: event.file_path,
           action: event.action,
-          tool_name: event.tool_name
+          tool_name: event.tool_name,
+          content_before: event.content_before,
+          content_after: event.content_after
         }).catch(err => console.warn('Failed to save file change:', err))
       }
     }

@@ -6,32 +6,38 @@ from app.tools import get_all_tools  # returns list of Tool instances
 from app.config import settings
 
 AGENT_PROMPTS = {
-    "planning": """You are a Planning Agent. Your role is to:
-- Analyze requirements and ask clarifying questions
-- Break down complex tasks into manageable steps
-- Design system architecture and data flows
-- Create detailed implementation plans
-- Identify potential challenges and trade-offs
-- Focus on the "what" and "why" before the "how"
-
-You should NOT write implementation code. Instead, focus on understanding, planning, and designing.""",
-
-    "building": """You are a Building Agent. Your role is to:
-- Implement code based on specifications and plans
-- Write clean, efficient, and well-tested code
-- Fix bugs and refactor existing code
-- Execute development tasks with precision
-- Use the available tools to read, write, and test code
-- Focus on getting things done
-
-You should write working code and execute implementation tasks."""
+"planning": """You are the Principal Enterprise Architect. Your role is to define the high-level structure, tech stack, and governance for mission-critical software. You do not write boilerplate code; you design systems.
+Primary Responsibilities: 
+- Architectural Guardrails: Define the system decomposition (Microservices, Hexagonal, or Layered).
+- Decision Records: Document Architectural Decision Records (ADRs) explaining the "Why" behind technology choices.
+- Cross-Cutting Concerns: Establish standards for Security (OAuth2/OIDC), Observability (OpenTelemetry), and Data Consistency (Saga patterns, ACID compliance).
+- Risk Mitigation: Identify bottlenecks, single points of failure, and technical debt before implementation begins.
+Operational Protocol:
+ 1) Analyze requirements for scalability, availability, and maintainability.
+ 2) Produce a Technical Blueprint including data models and API specifications (OpenAPI).
+ 3) Create Lead Developer plans to ensure they align with the blueprint. Write a high-level overview in a PLAN.md file. Break down complex tasks into manageable steps listed out in the TODO.md file.
+Tone & Style:
+  Abstract, high-level, authoritative, and focused on the "big picture." You prioritize stability and compliance over "shiny" new libraries."""
+  ,    
+  "building": """You are the Lead Software Engineer. Your role is to translate architectural blueprints into production-ready, high-quality codebases. You manage the "how" of the implementation.
+Primary Responsibilities:
+- Code Excellence: Enforce SOLID principles, Dry/WET balance, and Clean Code standards.
+- Implementation Strategy: Break down Architect blueprints into actionable modules, components, and services.
+- Testing Strategy: Implement a testing pyramid (Unit, Integration, and E2E) ensuring 80%+ coverage for business logic.
+- Performance: Optimize algorithms, database queries (indexing/caching), and memory management.
+Operational Protocol:
+1) Review the Architect’s Blueprint.
+2) Execute the build, ensuring every function is typed, documented, and error-handled.
+Tone & Style:
+  Practical, technical, and detail-oriented. You are obbessed with type safety, edge cases, and making the code readable for other humans."""
 }
 
 async def run_agent(
     user_message: str,
     workspace: str,
     history: list = None,
-    agent_type: str = "building"
+    agent_type: str = "building",
+    cumulative_tokens: dict = None
 ) -> AsyncGenerator[dict, None]:
     if history is None:
         history = []
@@ -51,9 +57,12 @@ async def run_agent(
 
     workspace_path = Path(workspace).resolve()
 
-    # Track token usage
-    total_input_tokens = 0
-    total_output_tokens = 0
+    # Track token usage - start from cumulative values if provided
+    if cumulative_tokens is None:
+        cumulative_tokens = {}
+    total_input_tokens = cumulative_tokens.get("input_tokens", 0)
+    total_output_tokens = cumulative_tokens.get("output_tokens", 0)
+    total_cost = cumulative_tokens.get("estimated_cost", 0.0)
 
     for iteration in range(settings.max_iterations):
         yield {"type": "status", "content": f"Thinking... (iteration {iteration + 1})"}
@@ -68,10 +77,10 @@ async def run_agent(
             total_input_tokens += input_tokens
             total_output_tokens += output_tokens
 
-            # Calculate cost (prices are per million tokens)
+            # Calculate cost (prices are per million tokens) - add to cumulative
             input_cost = (input_tokens / 1_000_000) * settings.input_price
             output_cost = (output_tokens / 1_000_000) * settings.output_price
-            total_cost = input_cost + output_cost
+            total_cost += input_cost + output_cost
 
             yield {
                 "type": "token_usage",
@@ -111,6 +120,18 @@ async def run_agent(
                     "arguments": args
                 }
 
+                # Capture file content BEFORE write operations
+                content_before = None
+                if func_name == "write_file":
+                    file_path = args.get("path", "")
+                    if file_path:
+                        full_path = (workspace_path / file_path).resolve()
+                        if full_path.exists() and full_path.is_file():
+                            try:
+                                content_before = full_path.read_text(encoding="utf-8")
+                            except Exception:
+                                content_before = None  # File exists but couldn't read
+
                 tool = tool_map[func_name]
                 result = await tool.execute(args, workspace=workspace_path)
 
@@ -127,13 +148,16 @@ async def run_agent(
                     "success": True
                 }
 
-                # Track file changes
+                # Track file changes with before/after content
                 if func_name == "write_file":
+                    content_after = args.get("content", "")
                     yield {
                         "type": "file_change",
                         "action": "write",
-                        "file_path": args.get("file_path", ""),
-                        "tool_name": func_name
+                        "file_path": args.get("path", ""),
+                        "tool_name": func_name,
+                        "content_before": content_before,
+                        "content_after": content_after
                     }
 
                 # Add tool result to conversation history

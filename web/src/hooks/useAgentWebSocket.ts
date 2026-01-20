@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { config } from '../config'
 
 type WebSocketMessage = any
 
@@ -25,11 +26,7 @@ export function useAgentWebSocket({ sessionId, onMessage }: UseAgentWebSocketOpt
   }, [])
 
   useEffect(() => {
-    // Determine WebSocket protocol based on current page protocol
-    // const protocol = 'ws:'
-    // // Use environment variable or default to localhost:8000
-    // const host = import.meta.env.VITE_API_HOST || 'localhost:8000'
-    const wsUrl = `ws://10.0.158.82:8000/ws/${sessionId}`
+    const wsUrl = `${config.wsBaseUrl}/ws/${sessionId}`
 
     console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
