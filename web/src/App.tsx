@@ -7,6 +7,7 @@ import { Plus, X, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import * as sessionService from './services/sessionService'
 import { config } from './config'
+import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext'
 
 type Message = {
   type: string
@@ -33,12 +34,13 @@ type Session = {
   tokenUsage: TokenUsage | null
 }
 
-function App() {
+function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [username, setUsername] = useState<string | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [showCreateSession, setShowCreateSession] = useState(false)
+  const wsManager = useWebSocket()
 
   // AUTHENTICATION DISABLED - Auto-login for development
   useEffect(() => {
@@ -75,6 +77,9 @@ function App() {
     setSessions(prev => [...prev, newSession])
     setActiveSessionId(sessionId)
     setShowCreateSession(false)
+
+    // Connect WebSocket for this session
+    wsManager.connect(sessionId)
   }
 
   const handleMessageUpdate = (sessionId: string, message: Message) => {
@@ -138,13 +143,21 @@ function App() {
 
     setSessions(prev => [...prev, newSession])
     setActiveSessionId(sessionId)
+
+    // Connect WebSocket for this session
+    wsManager.connect(sessionId)
   }
 
   const handleCloseSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+
+    // Disconnect WebSocket for this session
+    wsManager.disconnect(sessionId)
+
     setSessions(prev => prev.filter(s => s.id !== sessionId))
     if (activeSessionId === sessionId) {
-      setActiveSessionId(sessions[0]?.id || null)
+      const remaining = sessions.filter(s => s.id !== sessionId)
+      setActiveSessionId(remaining[0]?.id || null)
     }
   }
 
@@ -224,13 +237,13 @@ function App() {
           />
         ) : activeSession ? (
           <SessionView
-            key={activeSession.id}
             sessionId={activeSession.id}
             initialMessages={activeSession.messages}
             initialTokenUsage={activeSession.tokenUsage}
             onMessageUpdate={(message) => handleMessageUpdate(activeSession.id, message)}
             onTokenUsageUpdate={(tokenUsage) => handleTokenUsageUpdate(activeSession.id, tokenUsage)}
             onBack={() => {}}
+            isActive={true}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -239,6 +252,14 @@ function App() {
         )}
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <WebSocketProvider>
+      <AppContent />
+    </WebSocketProvider>
   )
 }
 

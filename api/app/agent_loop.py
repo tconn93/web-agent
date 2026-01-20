@@ -1,6 +1,7 @@
 from typing import AsyncGenerator
 from pathlib import Path
 import json
+import aiofiles
 from app.grok_client import chat_completion
 from app.tools import get_all_tools  # returns list of Tool instances
 from app.config import settings
@@ -120,7 +121,7 @@ async def run_agent(
                     "arguments": args
                 }
 
-                # Capture file content BEFORE write operations
+                # Capture file content BEFORE write operations (non-blocking)
                 content_before = None
                 if func_name == "write_file":
                     file_path = args.get("path", "")
@@ -128,7 +129,8 @@ async def run_agent(
                         full_path = (workspace_path / file_path).resolve()
                         if full_path.exists() and full_path.is_file():
                             try:
-                                content_before = full_path.read_text(encoding="utf-8")
+                                async with aiofiles.open(full_path, mode='r', encoding='utf-8') as f:
+                                    content_before = await f.read()
                             except Exception:
                                 content_before = None  # File exists but couldn't read
 

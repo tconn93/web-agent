@@ -1,6 +1,7 @@
 # backend/app/main.py
 import uuid
 import asyncio
+from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Any
 
@@ -72,6 +73,12 @@ class MessageRequest(BaseModel):
 # In production → redis / postgres + session expiration
 sessions: Dict[str, Dict[str, Any]] = {}  # session_id → {"history": list, "workspace": Path}
 
+# Session-level locks for state access (prevents race conditions on concurrent reads/writes)
+session_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+# Workspace-level locks for file operations (prevents conflicts when multiple agents work on same workspace)
+workspace_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
 
 @app.get("/health")
 async def health_check():
@@ -130,22 +137,24 @@ async def list_session_files(session_id: str, path: str = ""):
 @app.get("/sessions/{session_id}/changes")
 async def get_session_changes(session_id: str):
     """Get file changes for a session"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    async with session_locks[session_id]:
+        if session_id not in sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    return {"changes": sessions[session_id].get("changes", [])}
+        return {"changes": sessions[session_id].get("changes", [])}
 
 
 @app.post("/sessions/{session_id}/changes")
 async def add_session_change(session_id: str, change: dict):
     """Add a file change to the session (called by tools)"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    async with session_locks[session_id]:
+        if session_id not in sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    change["timestamp"] = datetime.utcnow().isoformat()
-    sessions[session_id]["changes"].append(change)
+        change["timestamp"] = datetime.utcnow().isoformat()
+        sessions[session_id]["changes"].append(change)
 
-    return {"success": True}
+        return {"success": True}
 
 
 @app.post("/sessions")

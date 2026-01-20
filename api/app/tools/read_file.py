@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import aiofiles
 from .base_tool import Tool
 
 class ReadFileTool(Tool):
@@ -25,6 +26,7 @@ class ReadFileTool(Tool):
         if not path.is_file():
             return f"Error: File not found: {arguments['path']}"
         try:
-            return path.read_text(encoding="utf-8")
+            async with aiofiles.open(path, mode='r', encoding='utf-8') as f:
+                return await f.read()
         except Exception as e:
             return f"Error reading file: {str(e)}"

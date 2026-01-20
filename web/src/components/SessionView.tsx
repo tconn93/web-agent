@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageInput } from './MessageInput'
 import { ChatMessage } from './ChatMessage'
 import { RightSidebar } from './RightSidebar'
-import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
+import { useSessionWebSocket } from '../contexts/WebSocketContext'
 import { ArrowLeft, FolderOpen, MessageSquare } from 'lucide-react'
 import * as sessionService from '../services/sessionService'
 
@@ -31,6 +31,7 @@ type Props = {
   onMessageUpdate: (message: Message) => void
   onTokenUsageUpdate: (tokenUsage: TokenUsage) => void
   onBack: () => void
+  isActive?: boolean
 }
 
 export function SessionView({
@@ -39,12 +40,18 @@ export function SessionView({
   initialTokenUsage,
   onMessageUpdate,
   onTokenUsageUpdate,
-  onBack
+  onBack,
+  isActive = true
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(initialTokenUsage)
   const [mobileView, setMobileView] = useState<'chat' | 'files'>('chat')
+  const [isConnected, setIsConnected] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Get WebSocket utilities from context
+  const { send, subscribe, getState, flushQueue } = useSessionWebSocket(sessionId)
 
   // Update local state when initial values change (session switch)
   useEffect(() => {
@@ -102,10 +109,37 @@ export function SessionView({
     }
   }, [sessionId, onMessageUpdate, onTokenUsageUpdate])
 
-  const { sendMessage: wsSendMessage, isConnected, error } = useAgentWebSocket({
-    sessionId,
-    onMessage: handleMessage
-  })
+  // Subscribe to WebSocket messages
+  useEffect(() => {
+    const unsubscribe = subscribe((event: any) => {
+      // Handle connection state changes
+      if (event.type === 'connection') {
+        setIsConnected(event.state === 'connected')
+        if (event.state === 'error') {
+          setError('Connection error')
+        } else if (event.state === 'connected') {
+          setError(null)
+        }
+        return
+      }
+
+      // Handle regular messages
+      handleMessage(event)
+    })
+
+    // Check initial connection state
+    const state = getState()
+    setIsConnected(state === 'connected')
+
+    return unsubscribe
+  }, [sessionId, subscribe, getState, handleMessage])
+
+  // Flush queued messages when becoming active
+  useEffect(() => {
+    if (isActive) {
+      flushQueue()
+    }
+  }, [isActive, flushQueue])
 
   // Wrap sendMessage to capture user input
   const sendMessage = useCallback((message: string) => {
@@ -130,8 +164,8 @@ export function SessionView({
     }).catch(err => console.warn('Failed to save user message:', err))
 
     // Send via WebSocket
-    wsSendMessage(message)
-  }, [sessionId, wsSendMessage, onMessageUpdate])
+    send(message)
+  }, [sessionId, send, onMessageUpdate])
 
   // Auto scroll to bottom
   useEffect(() => {
