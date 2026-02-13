@@ -1,6 +1,7 @@
 # backend/app/main.py
 import uuid
 import asyncio
+from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Any
 
@@ -72,6 +73,12 @@ class MessageRequest(BaseModel):
 # In production → redis / postgres + session expiration
 sessions: Dict[str, Dict[str, Any]] = {}  # session_id → {"history": list, "workspace": Path}
 
+# Session-level locks for state access (prevents race conditions on concurrent reads/writes)
+session_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+# Workspace-level locks for file operations (prevents conflicts when multiple agents work on same workspace)
+workspace_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
 
 @app.get("/health")
 async def health_check():
@@ -130,22 +137,24 @@ async def list_session_files(session_id: str, path: str = ""):
 @app.get("/sessions/{session_id}/changes")
 async def get_session_changes(session_id: str):
     """Get file changes for a session"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    async with session_locks[session_id]:
+        if session_id not in sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    return {"changes": sessions[session_id].get("changes", [])}
+        return {"changes": sessions[session_id].get("changes", [])}
 
 
 @app.post("/sessions/{session_id}/changes")
 async def add_session_change(session_id: str, change: dict):
     """Add a file change to the session (called by tools)"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    async with session_locks[session_id]:
+        if session_id not in sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    change["timestamp"] = datetime.utcnow().isoformat()
-    sessions[session_id]["changes"].append(change)
+        change["timestamp"] = datetime.utcnow().isoformat()
+        sessions[session_id]["changes"].append(change)
 
-    return {"success": True}
+        return {"success": True}
 
 
 @app.post("/sessions")
@@ -165,6 +174,7 @@ async def create_session(req: StartSessionRequest):
         "workspace": workspace,
         "agent_type": agent_type,
         "changes": [],  # Track file changes
+        "token_usage": {"input_tokens": 0, "output_tokens": 0, "estimated_cost": 0.0},  # Cumulative token usage
         "created_at": datetime.utcnow().isoformat()
     }
 
@@ -177,7 +187,14 @@ async def create_session(req: StartSessionRequest):
 
 
 @app.post("/sessions/{session_id}/resume")
-async def resume_session(session_id: str, workspace: str, agent_type: str):
+async def resume_session(
+    session_id: str,
+    workspace: str,
+    agent_type: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    estimated_cost: float = 0.0
+):
     """Resume an existing session (for WebSocket to work)"""
     from pathlib import Path
     Path(workspace).mkdir(parents=True, exist_ok=True)
@@ -187,6 +204,11 @@ async def resume_session(session_id: str, workspace: str, agent_type: str):
         "workspace": workspace,
         "agent_type": agent_type,
         "changes": [],
+        "token_usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost": estimated_cost
+        },
         "created_at": datetime.utcnow().isoformat()
     }
 
@@ -237,7 +259,8 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                     user_message=user_message,
                     workspace=workspace,
                     history=history.copy(),  # shallow copy - we append in place later
-                    agent_type=agent_type
+                    agent_type=agent_type,
+                    cumulative_tokens=session.get("token_usage")
                 ):
                     # Convert dict → proper model (for validation & serialization)
                     if event_dict["type"] == "status":
@@ -272,6 +295,14 @@ async def agent_websocket(websocket: WebSocket, session_id: str):
                     # Track file changes
                     if event.type == "file_change":
                         session["changes"].append(event.model_dump())
+
+                    # Update cumulative token usage in session
+                    if event.type == "token_usage":
+                        session["token_usage"] = {
+                            "input_tokens": event.input_tokens,
+                            "output_tokens": event.output_tokens,
+                            "estimated_cost": event.estimated_cost
+                        }
 
             except Exception as e:
                 error_msg = f"Agent loop error: {str(e)}"

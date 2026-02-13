@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Folder, File, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { config } from '../config'
 
 type FileItem = {
   name: string
@@ -24,7 +25,7 @@ export function FileExplorer({ sessionId }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const url = `http://10.0.158.82:8000/sessions/${sessionId}/files${path ? `?path=${encodeURIComponent(path)}` : ''}`
+      const url = `${config.apiBaseUrl}/sessions/${sessionId}/files${path ? `?path=${encodeURIComponent(path)}` : ''}`
       const res = await fetch(url)
 
       if (!res.ok) throw new Error('Failed to fetch files')

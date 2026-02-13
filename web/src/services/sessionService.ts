@@ -2,7 +2,9 @@
  * Service for persisting session data to the backend database
  */
 
-const API_BASE = 'http://10.0.158.82:8000/api/sessions'
+import { config } from '../config'
+
+const API_BASE = `${config.apiBaseUrl}/api/sessions`
 
 export interface MessageData {
   role: string
@@ -22,6 +24,8 @@ export interface FileChangeData {
   file_path: string
   action: string
   tool_name: string
+  content_before?: string | null
+  content_after?: string | null
 }
 
 export interface TokenUsageData {

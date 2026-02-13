@@ -58,6 +58,8 @@ class FileChangeMessage(AgentMessage):
     action: str  # "write", "delete", etc.
     file_path: str
     tool_name: str
+    content_before: Optional[str] = None  # File content before the change
+    content_after: Optional[str] = None  # File content after the change
 
 
 # Union of all possible websocket messages

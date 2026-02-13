@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as sessionService from '../services/sessionService'
+import { config } from '../config'
 
 type Props = {
   onSessionCreated: (sessionId: string, agentType: string, workspace: string) => void
@@ -17,7 +18,7 @@ export function CreateSession({ onSessionCreated, onCancel }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("http://10.0.158.82:8000/sessions", {
+      const res = await fetch(`${config.apiBaseUrl}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

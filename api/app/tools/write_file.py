@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+import aiofiles
 
 from .base_tool import Tool
 
@@ -58,8 +59,8 @@ class WriteFileTool(Tool):
             full_path.parent.mkdir(parents=True, exist_ok=True)
 
             write_mode = "w" if mode == "w" else "a"
-            with full_path.open(write_mode, encoding="utf-8") as f:
-                f.write(content)
+            async with aiofiles.open(full_path, mode=write_mode, encoding="utf-8") as f:
+                await f.write(content)
 
             action = "Overwritten" if write_mode == "w" else "Appended to"
             return f"{action} file successfully: {rel_path}\nSize: {len(content)} characters"

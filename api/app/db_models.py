@@ -73,6 +73,8 @@ class FileChange(Base):
     file_path = Column(String, nullable=False)
     action = Column(String, nullable=False)  # "write", "delete", "read"
     tool_name = Column(String, nullable=False)
+    content_before = Column(Text, nullable=True)  # File content before the change (null for new files)
+    content_after = Column(Text, nullable=True)  # File content after the change (null for deletes)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
